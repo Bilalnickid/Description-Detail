@@ -1,3 +1,5 @@
 # Description-Detail
-Exercise: Introduction to GitHub
+Exercise: How do i Excercise
+
+
 Print("Hello, And Welcome")
