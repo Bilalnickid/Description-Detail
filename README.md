@@ -6,7 +6,7 @@ Print("Hello, And Welcome")
 
 # Data Analysis Learning Journal
 
-## Day 1: []
+## Day 1: [Data Modelling and View on who the parent and child or Primary of data is to get.]
 ### Topics Covered
 - [List the topics you learned, e.g., "Introduction to Data Analysis", "Basics of Python"]
 
