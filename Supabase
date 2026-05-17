@@ -1,0 +1,316 @@
+/*
+  # Repair Shop Management System Schema
+
+  ## Overview
+  This migration creates a comprehensive repair shop management system with customer tracking,
+  service management, work orders, and action logging.
+
+  ## 1. New Tables
+
+  ### `profiles`
+  - `id` (uuid, primary key, references auth.users)
+  - `email` (text)
+  - `full_name` (text)
+  - `role` (text) - admin, technician, or staff
+  - `created_at` (timestamptz)
+  - `updated_at` (timestamptz)
+
+  ### `customers`
+  - `id` (uuid, primary key)
+  - `full_name` (text)
+  - `email` (text)
+  - `phone` (text)
+  - `address` (text)
+  - `vehicle_make` (text)
+  - `vehicle_model` (text)
+  - `vehicle_year` (integer)
+  - `vehicle_plate` (text)
+  - `notes` (text)
+  - `created_at` (timestamptz)
+  - `updated_at` (timestamptz)
+
+  ### `service_types`
+  - `id` (uuid, primary key)
+  - `name` (text)
+  - `description` (text)
+  - `estimated_duration` (integer) - in minutes
+  - `base_price` (numeric)
+  - `is_active` (boolean)
+  - `created_at` (timestamptz)
+  - `updated_at` (timestamptz)
+
+  ### `work_orders`
+  - `id` (uuid, primary key)
+  - `customer_id` (uuid, references customers)
+  - `status` (text) - pending, in_progress, completed, cancelled
+  - `priority` (text) - low, medium, high, urgent
+  - `assigned_to` (uuid, references profiles)
+  - `total_cost` (numeric)
+  - `notes` (text)
+  - `started_at` (timestamptz)
+  - `completed_at` (timestamptz)
+  - `created_at` (timestamptz)
+  - `updated_at` (timestamptz)
+
+  ### `work_order_services`
+  - `id` (uuid, primary key)
+  - `work_order_id` (uuid, references work_orders)
+  - `service_type_id` (uuid, references service_types)
+  - `price` (numeric)
+  - `created_at` (timestamptz)
+
+  ### `actions`
+  - `id` (uuid, primary key)
+  - `work_order_id` (uuid, references work_orders)
+  - `performed_by` (uuid, references profiles)
+  - `action_type` (text) - diagnosis, repair, inspection, parts_ordered, customer_contacted
+  - `description` (text)
+  - `duration_minutes` (integer)
+  - `created_at` (timestamptz)
+
+  ## 2. Security
+  - Enable RLS on all tables
+  - Admin users can manage all data
+  - Technicians can view and update work orders assigned to them
+  - Staff can view customers and work orders
+  - All authenticated users can read service types
+
+  ## 3. Indexes
+  - Add indexes for foreign keys and frequently queried fields
+*/
+
+-- Create profiles table
+CREATE TABLE IF NOT EXISTS profiles (
+  id uuid PRIMARY KEY REFERENCES auth.users ON DELETE CASCADE,
+  email text NOT NULL,
+  full_name text NOT NULL,
+  role text NOT NULL DEFAULT 'staff' CHECK (role IN ('admin', 'technician', 'staff')),
+  created_at timestamptz DEFAULT now(),
+  updated_at timestamptz DEFAULT now()
+);
+
+-- Create customers table
+CREATE TABLE IF NOT EXISTS customers (
+  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  full_name text NOT NULL,
+  email text,
+  phone text,
+  address text,
+  vehicle_make text,
+  vehicle_model text,
+  vehicle_year integer,
+  vehicle_plate text,
+  notes text DEFAULT '',
+  created_at timestamptz DEFAULT now(),
+  updated_at timestamptz DEFAULT now()
+);
+
+-- Create service_types table
+CREATE TABLE IF NOT EXISTS service_types (
+  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  name text NOT NULL,
+  description text DEFAULT '',
+  estimated_duration integer DEFAULT 60,
+  base_price numeric(10, 2) DEFAULT 0,
+  is_active boolean DEFAULT true,
+  created_at timestamptz DEFAULT now(),
+  updated_at timestamptz DEFAULT now()
+);
+
+-- Create work_orders table
+CREATE TABLE IF NOT EXISTS work_orders (
+  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  customer_id uuid NOT NULL REFERENCES customers ON DELETE CASCADE,
+  status text NOT NULL DEFAULT 'pending' CHECK (status IN ('pending', 'in_progress', 'completed', 'cancelled')),
+  priority text NOT NULL DEFAULT 'medium' CHECK (priority IN ('low', 'medium', 'high', 'urgent')),
+  assigned_to uuid REFERENCES profiles ON DELETE SET NULL,
+  total_cost numeric(10, 2) DEFAULT 0,
+  notes text DEFAULT '',
+  started_at timestamptz,
+  completed_at timestamptz,
+  created_at timestamptz DEFAULT now(),
+  updated_at timestamptz DEFAULT now()
+);
+
+-- Create work_order_services table
+CREATE TABLE IF NOT EXISTS work_order_services (
+  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  work_order_id uuid NOT NULL REFERENCES work_orders ON DELETE CASCADE,
+  service_type_id uuid NOT NULL REFERENCES service_types ON DELETE CASCADE,
+  price numeric(10, 2) DEFAULT 0,
+  created_at timestamptz DEFAULT now()
+);
+
+-- Create actions table
+CREATE TABLE IF NOT EXISTS actions (
+  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  work_order_id uuid NOT NULL REFERENCES work_orders ON DELETE CASCADE,
+  performed_by uuid NOT NULL REFERENCES profiles ON DELETE CASCADE,
+  action_type text NOT NULL CHECK (action_type IN ('diagnosis', 'repair', 'inspection', 'parts_ordered', 'customer_contacted', 'other')),
+  description text NOT NULL,
+  duration_minutes integer DEFAULT 0,
+  created_at timestamptz DEFAULT now()
+);
+
+-- Create indexes
+CREATE INDEX IF NOT EXISTS idx_work_orders_customer ON work_orders(customer_id);
+CREATE INDEX IF NOT EXISTS idx_work_orders_assigned ON work_orders(assigned_to);
+CREATE INDEX IF NOT EXISTS idx_work_orders_status ON work_orders(status);
+CREATE INDEX IF NOT EXISTS idx_work_order_services_order ON work_order_services(work_order_id);
+CREATE INDEX IF NOT EXISTS idx_actions_work_order ON actions(work_order_id);
+CREATE INDEX IF NOT EXISTS idx_actions_performed_by ON actions(performed_by);
+
+-- Enable Row Level Security
+ALTER TABLE profiles ENABLE ROW LEVEL SECURITY;
+ALTER TABLE customers ENABLE ROW LEVEL SECURITY;
+ALTER TABLE service_types ENABLE ROW LEVEL SECURITY;
+ALTER TABLE work_orders ENABLE ROW LEVEL SECURITY;
+ALTER TABLE work_order_services ENABLE ROW LEVEL SECURITY;
+ALTER TABLE actions ENABLE ROW LEVEL SECURITY;
+
+-- Profiles policies
+CREATE POLICY "Users can view own profile"
+  ON profiles FOR SELECT
+  TO authenticated
+  USING (auth.uid() = id);
+
+CREATE POLICY "Users can update own profile"
+  ON profiles FOR UPDATE
+  TO authenticated
+  USING (auth.uid() = id)
+  WITH CHECK (auth.uid() = id);
+
+CREATE POLICY "Admins can view all profiles"
+  ON profiles FOR SELECT
+  TO authenticated
+  USING (
+    EXISTS (
+      SELECT 1 FROM profiles
+      WHERE profiles.id = auth.uid() AND profiles.role = 'admin'
+    )
+  );
+
+CREATE POLICY "Admins can manage profiles"
+  ON profiles FOR ALL
+  TO authenticated
+  USING (
+    EXISTS (
+      SELECT 1 FROM profiles
+      WHERE profiles.id = auth.uid() AND profiles.role = 'admin'
+    )
+  );
+
+-- Customers policies
+CREATE POLICY "Authenticated users can view customers"
+  ON customers FOR SELECT
+  TO authenticated
+  USING (true);
+
+CREATE POLICY "Admins can manage customers"
+  ON customers FOR ALL
+  TO authenticated
+  USING (
+    EXISTS (
+      SELECT 1 FROM profiles
+      WHERE profiles.id = auth.uid() AND profiles.role = 'admin'
+    )
+  );
+
+-- Service types policies
+CREATE POLICY "Authenticated users can view service types"
+  ON service_types FOR SELECT
+  TO authenticated
+  USING (true);
+
+CREATE POLICY "Admins can manage service types"
+  ON service_types FOR ALL
+  TO authenticated
+  USING (
+    EXISTS (
+      SELECT 1 FROM profiles
+      WHERE profiles.id = auth.uid() AND profiles.role = 'admin'
+    )
+  );
+
+-- Work orders policies
+CREATE POLICY "Authenticated users can view work orders"
+  ON work_orders FOR SELECT
+  TO authenticated
+  USING (true);
+
+CREATE POLICY "Admins can manage all work orders"
+  ON work_orders FOR ALL
+  TO authenticated
+  USING (
+    EXISTS (
+      SELECT 1 FROM profiles
+      WHERE profiles.id = auth.uid() AND profiles.role = 'admin'
+    )
+  );
+
+CREATE POLICY "Technicians can update assigned work orders"
+  ON work_orders FOR UPDATE
+  TO authenticated
+  USING (
+    assigned_to = auth.uid() AND
+    EXISTS (
+      SELECT 1 FROM profiles
+      WHERE profiles.id = auth.uid() AND profiles.role = 'technician'
+    )
+  )
+  WITH CHECK (
+    assigned_to = auth.uid() AND
+    EXISTS (
+      SELECT 1 FROM profiles
+      WHERE profiles.id = auth.uid() AND profiles.role = 'technician'
+    )
+  );
+
+-- Work order services policies
+CREATE POLICY "Authenticated users can view work order services"
+  ON work_order_services FOR SELECT
+  TO authenticated
+  USING (true);
+
+CREATE POLICY "Admins can manage work order services"
+  ON work_order_services FOR ALL
+  TO authenticated
+  USING (
+    EXISTS (
+      SELECT 1 FROM profiles
+      WHERE profiles.id = auth.uid() AND profiles.role = 'admin'
+    )
+  );
+
+-- Actions policies
+CREATE POLICY "Authenticated users can view actions"
+  ON actions FOR SELECT
+  TO authenticated
+  USING (true);
+
+CREATE POLICY "Authenticated users can create actions"
+  ON actions FOR INSERT
+  TO authenticated
+  WITH CHECK (performed_by = auth.uid());
+
+CREATE POLICY "Admins can manage all actions"
+  ON actions FOR ALL
+  TO authenticated
+  USING (
+    EXISTS (
+      SELECT 1 FROM profiles
+      WHERE profiles.id = auth.uid() AND profiles.role = 'admin'
+    )
+  );
+
+-- Insert sample service types
+INSERT INTO service_types (name, description, estimated_duration, base_price) VALUES
+  ('Oil Change', 'Standard oil change with filter replacement', 30, 49.99),
+  ('Brake Inspection', 'Complete brake system inspection', 45, 79.99),
+  ('Tire Rotation', 'Rotate all four tires and check pressure', 30, 39.99),
+  ('Engine Diagnostic', 'Computer diagnostic scan', 60, 99.99),
+  ('Battery Replacement', 'Replace car battery', 30, 149.99),
+  ('Air Filter Replacement', 'Replace engine air filter', 15, 29.99),
+  ('Transmission Service', 'Transmission fluid change', 90, 199.99),
+  ('Wheel Alignment', 'Four-wheel alignment', 60, 89.99)
+ON CONFLICT DO NOTHING;
