@@ -1,0 +1,71 @@
+*Project Settings*
+https://customer-repair-mana-lf8w.bolt.host
+*General
+Customer Repair Management Prototype
+Design system
+Bring in a library of components and install its dependencies automatically.
+
+Domains & Hosting
+Domains & Hosting
+Your project is accessible at its bolt.host subdomain. To use a custom domain instead, buy one through Bolt or connect one you own.
+o0l 
+
+*Analytics
+
+*Database
+Tables
+
+View and manage database tables and records. Ask Bolt to create or modify tables.
+
+profiles
+
+1 rows
+
+customers
+
+1 rows
+
+service_types
+
+8 rows
+
+work_orders
+
+1 rows
+
+work_order_services
+
+4 rows
+
+actions
+
+1 rows
+
+parts_categories
+
+9 rows
+
+parts
+
+0 rows
+
+service_categories
+
+5 rows
+
+work_order_parts
+
+0 rows
+Authentication
+
+Server Functions
+
+Secrets
+
+User Management
+
+File Storage
+
+Knowledge
+
+Backups
